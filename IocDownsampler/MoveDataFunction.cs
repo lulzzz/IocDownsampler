@@ -4,9 +4,9 @@ using Microsoft.Azure.WebJobs.Host;
 
 namespace IocDownsampler
 {
-    public static class Function1
+    public static class MoveDataFunction
     {
-        [FunctionName("Function1")]
+        [FunctionName("MoveDataFunction")]
         public static void Run([TimerTrigger("0 */5 * * * *")]TimerInfo myTimer, TraceWriter log)
         {
             log.Info($"C# Timer trigger function executed at: {DateTime.Now}");
