@@ -1,4 +1,6 @@
-﻿using System.Net;
+﻿using Microsoft.Azure.WebJobs.Host;
+using System;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -13,7 +15,7 @@ namespace IocDownsampler
             _config = config;
         }
 
-        public async Task<string> Query(string query)
+        public async Task<string> Query(string query, TraceWriter log)
         {
             using (var client = new WebClient())
             {
@@ -23,8 +25,16 @@ namespace IocDownsampler
                 var reqparm = new System.Collections.Specialized.NameValueCollection();
                 reqparm.Add("db", _config.DbName);
                 reqparm.Add("q", query);
-                byte[] responsebytes = await client.UploadValuesTaskAsync(_config.ApiManagementUrl, "POST", reqparm);
-                return Encoding.UTF8.GetString(responsebytes);
+                try
+                {
+                    byte[] responsebytes = await client.UploadValuesTaskAsync(_config.ApiManagementUrl, "POST", reqparm);
+                    return Encoding.UTF8.GetString(responsebytes);
+                }
+                catch (Exception ex)
+                {
+                    log.Error($"This query failed: {query}", ex);
+                    throw;
+                }
             }
         }
     }

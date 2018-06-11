@@ -97,18 +97,11 @@ namespace IocDownsampler
                         batchBuilder.Append(query);
                     }
 
-                    tasks.Add(Timer.Time(() => influxQueryExecutor.Query(batchBuilder.ToString()), $"Querying influx #{a}", log));
+                    tasks.Add(Timer.Time(() => influxQueryExecutor.Query(batchBuilder.ToString(), log), $"Querying influx #{a}", log));
                     batchBuilder.Clear();
                 }
 
-                try
-                {
-                    await Timer.Time(() => Task.WhenAll(tasks), "All 'last' queries", log);
-                }
-                catch (Exception)
-                {
-                    throw;
-                }
+                await Timer.Time(() => Task.WhenAll(tasks), "All 'last' queries", log);
 
                 var deserializedResultsets = tasks.Select(t => JsonConvert.DeserializeObject<InfluxDbResultset>(t.Result)).ToList();
 
@@ -201,7 +194,7 @@ namespace IocDownsampler
                     progress.ProcessedTags++;
                 }
 
-                tasks.Add(Timer.Time(() => influxQueryExecutor.Query(batchBuilder.ToString()), $"Querying influx #{a}", log));
+                tasks.Add(Timer.Time(() => influxQueryExecutor.Query(batchBuilder.ToString(), log), $"Querying influx #{a}", log));
                 batchBuilder.Clear();
             }
 
