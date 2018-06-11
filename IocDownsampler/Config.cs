@@ -17,7 +17,7 @@ namespace IocDownsampler
                 InfluxConfig = new InfluxConfig
                 {
                     ApiManagementUrl = GetConfigValue("ApiManagementUrl"),
-                    ApiManagementHeaderName = GetConfigValue("Ocp-Apim-Subscription-Key"),
+                    ApiManagementHeaderName = GetConfigValue("ApiManagementHeaderName"),
                     ApiManagementKey = GetConfigValue("ApiManagementKey"),
                     DbUsername = GetConfigValue("InfluxDbUsername"),
                     DbPassword = GetConfigValue("InfluxDbPassword"),
