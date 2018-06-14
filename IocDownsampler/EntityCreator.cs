@@ -15,7 +15,7 @@ namespace IocDownsampler
             _tagToId = tagToId;
         }
 
-        public List<TS> CreateEntities<T>(IEnumerable<string> resultsets, int period) where T : TS, new()
+        public List<TS> CreateEntities<T>(IEnumerable<string> resultsets, int period, bool skipLastPoint = true) where T : TS, new()
         {
             var deserializedResultsets = resultsets.Select(rs => JsonConvert.DeserializeObject<InfluxDbResultset>(rs)).ToList();
 
@@ -26,6 +26,7 @@ namespace IocDownsampler
                 foreach (var result in resultset.Results.Where(r => r.Series != null))
                 {
                     var serie = result.Series.Single();
+                    var timeseriesEntities = new List<TS>();
 
                     foreach (var value in serie.Values)
                     {
@@ -40,7 +41,16 @@ namespace IocDownsampler
                             Period = period
                         };
 
-                        entities.Add(entity);
+                        timeseriesEntities.Add(entity);
+
+                        if (skipLastPoint)
+                        {
+                            entities.AddRange(timeseriesEntities.OrderBy(e => e.Timestamp).Take(entities.Count - 1));
+                        }
+                        else
+                        {
+                            entities.AddRange(timeseriesEntities);
+                        }
                     }
                 }
             }

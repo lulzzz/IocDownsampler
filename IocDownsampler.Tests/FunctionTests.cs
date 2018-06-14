@@ -62,7 +62,7 @@ namespace IocDownsampler.Tests
                 await DataMover.Move(config, new Logger(TraceLevel.Error));
                 int firstCount = GetCount(config);
 
-                Assert.AreEqual(firstNumberOfPoints, firstCount);
+                Assert.AreEqual(firstNumberOfPoints - numberOfTimeSeries, firstCount);
 
                 string secondBody = CreateBody(config, points.Skip(firstNumberOfPoints).Take(secondNumberOfPoints).ToList());
                 await queryExecutor.Write(secondBody, config.InfluxConfig.DbName, config.InfluxConfig.DbRetentionPolicy);
@@ -71,7 +71,7 @@ namespace IocDownsampler.Tests
 
                 int secondCount = GetCount(config);
 
-                Assert.AreEqual(numberOfPoints, secondCount);
+                Assert.AreEqual(numberOfPoints - numberOfTimeSeries, secondCount);
             }
             finally
             {
