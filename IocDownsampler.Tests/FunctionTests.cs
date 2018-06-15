@@ -24,15 +24,19 @@ namespace IocDownsampler.Tests
                     ApiManagementHeaderName = "dummy",
                     ApiManagementKey = "dummy",
                     ApiManagementUrl = "http://localhost:8086/query",
-                    DbMeasurement = "aggregates",
+                    DbImsMeasurement = "aggregates",
+                    DbImsRetentionPolicy = "aggregates",
+                    DbCalcMeasurement = "aggregates",
+                    DbCalcRetentionPolicy = "aggregates",
                     DbName = "iocdata",
                     DbPassword = "root",
-                    DbRetentionPolicy = "aggregates",
                     DbUsername = "root",
                     DefaultTime = "120d",
                     FirsttimerBatchSize = 1,
                     OldtimerBatchSize = 100,
-                    Parallelism = 32
+                    Parallelism = 32,
+                    DoAdHocResampling = false,
+                    SkipLastSample = false // true
                 }
             };
             const string influxBaseUrl = "http://localhost:8086/";
@@ -46,7 +50,7 @@ namespace IocDownsampler.Tests
             try
             {
                 await queryExecutor.Query($"CREATE DATABASE {config.InfluxConfig.DbName}");
-                await queryExecutor.Query($"CREATE RETENTION POLICY \"{config.InfluxConfig.DbRetentionPolicy}\" ON \"{config.InfluxConfig.DbName}\" DURATION 1d REPLICATION 1");
+                await queryExecutor.Query($"CREATE RETENTION POLICY \"{config.InfluxConfig.DbImsRetentionPolicy}\" ON \"{config.InfluxConfig.DbName}\" DURATION 1d REPLICATION 1");
 
                 var utcNow = DateTime.UtcNow;
                 var startTime = new DateTime(utcNow.Year, utcNow.Month, utcNow.Day, 0, 0, 0);
@@ -57,7 +61,7 @@ namespace IocDownsampler.Tests
 
                 string firstBody = CreateBody(config, points.Take(firstNumberOfPoints).ToList());
 
-                await queryExecutor.Write(firstBody, config.InfluxConfig.DbName, config.InfluxConfig.DbRetentionPolicy);
+                await queryExecutor.Write(firstBody, config.InfluxConfig.DbName, config.InfluxConfig.DbImsRetentionPolicy);
 
                 await DataMover.Move(config, new Logger(TraceLevel.Error));
                 int firstCount = GetCount(config);
@@ -65,7 +69,7 @@ namespace IocDownsampler.Tests
                 Assert.AreEqual(firstNumberOfPoints - numberOfTimeSeries, firstCount);
 
                 string secondBody = CreateBody(config, points.Skip(firstNumberOfPoints).Take(secondNumberOfPoints).ToList());
-                await queryExecutor.Write(secondBody, config.InfluxConfig.DbName, config.InfluxConfig.DbRetentionPolicy);
+                await queryExecutor.Write(secondBody, config.InfluxConfig.DbName, config.InfluxConfig.DbImsRetentionPolicy);
 
                 await DataMover.Move(config, new Logger(TraceLevel.Error));
 
@@ -81,16 +85,17 @@ namespace IocDownsampler.Tests
                 {
                     conn.Open();
 
-                    using (var cmd = new SqlCommand("TRUNCATE TABLE [IMSTS]", conn))
-                    {
-                        cmd.ExecuteNonQuery();
-                    }
-
-                    using (var cmd = new SqlCommand("TRUNCATE TABLE [IMSTag]", conn))
-                    {
-                        cmd.ExecuteNonQuery();
-                    }
+                    TruncateTable(conn, "[IMSTS]");
+                    TruncateTable(conn, "[IMSTag]");
                 }
+            }
+        }
+
+        private static void TruncateTable(SqlConnection conn, string tableName)
+        {
+            using (var cmd = new SqlCommand($"TRUNCATE TABLE {tableName}", conn))
+            {
+                cmd.ExecuteNonQuery();
             }
         }
 
@@ -169,7 +174,7 @@ namespace IocDownsampler.Tests
 
             foreach (var tsSpec in tsSpecs)
             {
-                points.Add($"{config.InfluxConfig.DbMeasurement},tag={tsSpec.Tag} 5minMean=1,5minMax=1,5minMin=1,5minStddev=0 {tsSpec.Timestamp.ToInfluxTimestamp()}");
+                points.Add($"{config.InfluxConfig.DbImsMeasurement},tag={tsSpec.Tag} 5minMean=1,5minMax=1,5minMin=1,5minStddev=0 {tsSpec.Timestamp.ToInfluxTimestamp()}");
             }
 
             return string.Join("\n", points);

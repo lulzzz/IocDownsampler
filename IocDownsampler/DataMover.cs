@@ -42,12 +42,26 @@ namespace IocDownsampler
             log.Info($"Calc FirstTimer Count: {calcFirstTimers.Count}");
             log.Info($"Calc OldTimer Count: {calcOldTimers.Count}");
 
-            var firstTimerTags = imsFirstTimers.Select(i => i.Tag).Concat(calcFirstTimers.Select(c => c.Tag)).ToList();
+            var imsFirstTimerTags = imsFirstTimers.Select(i => i.Tag).ToList();
+            var calcFirstTimerTags = calcFirstTimers.Select(c => c.Tag).ToList();
 
-            var tagsWithLastTimestamp = await Timer.Time(() => GetTagsWithExistingData(config.InfluxConfig, influxQueryExecutor, firstTimerTags, log), "Getting last points for newtimers", log);
+            var imsTagsWithLastTimestampTask = Timer.Time(() => GetTagsWithExistingData(influxQueryExecutor, imsFirstTimerTags,
+                                                                    config.InfluxConfig.DbImsRetentionPolicy, config.InfluxConfig.DbImsMeasurement,
+                                                                    config.InfluxConfig.DefaultTime, config.InfluxConfig.DoAdHocResampling, log),
+                                                                    "Getting last points for ims newtimers", log);
 
-            imsFirstTimers = imsFirstTimers.Where(i => tagsWithLastTimestamp.ContainsKey(i.Tag)).ToList();
-            calcFirstTimers = calcFirstTimers.Where(c => tagsWithLastTimestamp.ContainsKey(c.Tag)).ToList();
+            var calcTagsWithLastTimestampTask = Timer.Time(() => GetTagsWithExistingData(influxQueryExecutor, calcFirstTimerTags,
+                                                                    config.InfluxConfig.DbCalcRetentionPolicy, config.InfluxConfig.DbCalcMeasurement,
+                                                                    config.InfluxConfig.DefaultTime, config.InfluxConfig.DoAdHocResampling, log),
+                                                                    "Getting last points for calc newtimers", log);
+
+            await Task.WhenAll(imsTagsWithLastTimestampTask, calcTagsWithLastTimestampTask);
+
+            var imsTagsWithLastTimestamp = imsTagsWithLastTimestampTask.Result;
+            var calcTagsWithLastTimestamp = calcTagsWithLastTimestampTask.Result;
+
+            imsFirstTimers = imsFirstTimers.Where(i => imsTagsWithLastTimestamp.ContainsKey(i.Tag)).ToList();
+            calcFirstTimers = calcFirstTimers.Where(c => calcTagsWithLastTimestamp.ContainsKey(c.Tag)).ToList();
 
             int totalCount = imsOldTimers.Count + calcOldTimers.Count + imsFirstTimers.Count + calcFirstTimers.Count;
 
@@ -59,16 +73,30 @@ namespace IocDownsampler
             const string imsTableName = "dbo.IMSTS";
 
             // Serve oldtimers first
-            progress.Add(await ProcessMetas(config.ConnectionString, imsIdName, imsTableName, config.InfluxConfig, config.Period, imsOldTimers, config.InfluxConfig.OldtimerBatchSize, config.InfluxConfig.Parallelism, influxQueryExecutor, imsEntityCreator, progress.ProcessedTags, imsOldTimers.Count, totalCount, log));
-            progress.Add(await ProcessMetas(config.ConnectionString, calcIdName, calcTableName, config.InfluxConfig, config.Period, calcOldTimers, config.InfluxConfig.OldtimerBatchSize, config.InfluxConfig.Parallelism, influxQueryExecutor, calcEntityCreator, progress.ProcessedTags, calcOldTimers.Count, totalCount, log));
+            progress.Add(await ProcessMetas(config.ConnectionString, imsIdName, imsTableName, config.InfluxConfig.DbImsRetentionPolicy,
+                                            config.InfluxConfig.DbImsRetentionPolicy, config.InfluxConfig.DefaultTime, config.InfluxConfig.DoAdHocResampling,
+                                            config.Period, imsOldTimers, config.InfluxConfig.OldtimerBatchSize, config.InfluxConfig.Parallelism, influxQueryExecutor,
+                                            imsEntityCreator, progress.ProcessedTags, imsOldTimers.Count, totalCount, log));
 
-            progress.Add(await ProcessMetas(config.ConnectionString, imsIdName, imsTableName, config.InfluxConfig, config.Period, imsFirstTimers, config.InfluxConfig.FirsttimerBatchSize, config.InfluxConfig.Parallelism, influxQueryExecutor, imsEntityCreator, progress.ProcessedTags, imsFirstTimers.Count, totalCount, log));
-            progress.Add(await ProcessMetas(config.ConnectionString, calcIdName, calcTableName, config.InfluxConfig, config.Period, calcFirstTimers, config.InfluxConfig.FirsttimerBatchSize, config.InfluxConfig.Parallelism, influxQueryExecutor, calcEntityCreator, progress.ProcessedTags, calcFirstTimers.Count, totalCount, log));
+            progress.Add(await ProcessMetas(config.ConnectionString, calcIdName, calcTableName, config.InfluxConfig.DbCalcRetentionPolicy,
+                                            config.InfluxConfig.DbCalcRetentionPolicy, config.InfluxConfig.DefaultTime, config.InfluxConfig.DoAdHocResampling,
+                                            config.Period, calcOldTimers, config.InfluxConfig.OldtimerBatchSize, config.InfluxConfig.Parallelism, influxQueryExecutor,
+                                            calcEntityCreator, progress.ProcessedTags, calcOldTimers.Count, totalCount, log));
+
+            progress.Add(await ProcessMetas(config.ConnectionString, imsIdName, imsTableName, config.InfluxConfig.DbImsRetentionPolicy,
+                                            config.InfluxConfig.DbImsRetentionPolicy, config.InfluxConfig.DefaultTime, config.InfluxConfig.DoAdHocResampling,
+                                            config.Period, imsFirstTimers, config.InfluxConfig.FirsttimerBatchSize, config.InfluxConfig.Parallelism, influxQueryExecutor,
+                                            imsEntityCreator, progress.ProcessedTags, imsFirstTimers.Count, totalCount, log));
+
+            progress.Add(await ProcessMetas(config.ConnectionString, calcIdName, calcTableName, config.InfluxConfig.DbCalcRetentionPolicy,
+                                            config.InfluxConfig.DbCalcRetentionPolicy, config.InfluxConfig.DefaultTime, config.InfluxConfig.DoAdHocResampling,
+                                            config.Period, calcFirstTimers, config.InfluxConfig.FirsttimerBatchSize, config.InfluxConfig.Parallelism, influxQueryExecutor,
+                                            calcEntityCreator, progress.ProcessedTags, calcFirstTimers.Count, totalCount, log));
 
             log.Info($"Processed points: {progress.ProcessedPoints}");
         }
 
-        private static async Task<IDictionary<string, DateTime>> GetTagsWithExistingData(InfluxConfig influxConfig, InfluxQueryExecutor influxQueryExecutor, List<string> tags, TraceWriter log, int batchSize = 256, int parallelism = 32)
+        private static async Task<IDictionary<string, DateTime>> GetTagsWithExistingData(InfluxQueryExecutor influxQueryExecutor, List<string> tags, string retentionPolicy, string measurement, string defaultTime, bool doAdHocResampling, TraceWriter log, int batchSize = 256, int parallelism = 32)
         {
             var dict = new Dictionary<string, DateTime>();
             int skip = 0;
@@ -93,11 +121,12 @@ namespace IocDownsampler
                     {
                         string tag = TagCleaner.Clean(tagInBatch);
 
-                        string query = $"SELECT last(\"5minMean\"), \"tag\" FROM \"{influxConfig.DbRetentionPolicy}\".\"{influxConfig.DbMeasurement}\" WHERE \"tag\"='{tag}' AND time > now() - {influxConfig.DefaultTime};";
+                        string query = QueryBuilder.CreateTagsWithExistingDataQuery(retentionPolicy, measurement, defaultTime, tag, doAdHocResampling); //$"SELECT last(\"5minMean\"), \"tag\" FROM \"{retentionPolicy}\".\"{measurement}\" WHERE \"tag\"='{tag}' AND time > now() - {defaultTime};";
                         batchBuilder.Append(query);
                     }
 
-                    tasks.Add(Timer.Time(() => influxQueryExecutor.Query(batchBuilder.ToString(), log), $"Querying influx #{a}", log));
+                    //tasks.Add(Timer.Time(() => influxQueryExecutor.Query(batchBuilder.ToString(), log), $"Querying influx #{a}", log));
+                    tasks.Add(influxQueryExecutor.Query(batchBuilder.ToString(), log));
                     batchBuilder.Clear();
                 }
 
@@ -125,7 +154,7 @@ namespace IocDownsampler
             return dict;
         }
 
-        private static async Task<PartProgress> ProcessMetas(string connectionString, string tagIdName, string tableName, InfluxConfig influxConfig, int period, List<TsMetadata> metas, int batchSize, int parallelism, InfluxQueryExecutor influxQueryExecutor, EntityCreator entityCreator, int previouslyProcessedTags, int count, int totalCount, TraceWriter log)
+        private static async Task<PartProgress> ProcessMetas(string connectionString, string tagIdName, string tableName, string retentionPolicy, string measurement, string defaultTime, bool doAdHocResampling, int period, List<TsMetadata> metas, int batchSize, int parallelism, InfluxQueryExecutor influxQueryExecutor, EntityCreator entityCreator, int previouslyProcessedTags, int count, int totalCount, TraceWriter log)
         {
             var progress = new PartProgress();
 
@@ -136,7 +165,7 @@ namespace IocDownsampler
 
             var batchBuilder = new StringBuilder();
 
-            var entities = await LoadEntities(influxConfig, period, metas, batchBuilder, batchSize, parallelism, progress, influxQueryExecutor, entityCreator, log);
+            var entities = await LoadEntities(retentionPolicy, measurement, defaultTime, doAdHocResampling, period, metas, batchBuilder, batchSize, parallelism, progress, influxQueryExecutor, entityCreator, log);
 
             while (progress.Skip < metas.Count || entities.Count > 0)
             {
@@ -149,12 +178,16 @@ namespace IocDownsampler
 
                     bulkInsertTask = Timer.Time(() => SqlBulkInserter.BulkInsert(connectionString, entities, tagIdName, tableName), $"Bulk insert of {entities.Count}", log);
                 }
+                else
+                {
+                    log.Info($"No Entities Found.");
+                }
 
                 Task<List<TS>> entitiesTask = Task.FromResult(new List<TS>());
 
                 if (progress.Skip < metas.Count)
                 {
-                    entitiesTask = LoadEntities(influxConfig, period, metas, batchBuilder, batchSize, parallelism, progress, influxQueryExecutor, entityCreator, log);
+                    entitiesTask = LoadEntities(retentionPolicy, measurement, defaultTime, doAdHocResampling, period, metas, batchBuilder, batchSize, parallelism, progress, influxQueryExecutor, entityCreator, log);
                 }
 
                 await Task.WhenAll(bulkInsertTask, entitiesTask);
@@ -168,7 +201,7 @@ namespace IocDownsampler
             return progress;
         }
 
-        private static async Task<List<TS>> LoadEntities(InfluxConfig influxConfig, int period, List<TsMetadata> metas, StringBuilder batchBuilder, int batchSize, int parallelism, PartProgress progress, InfluxQueryExecutor influxQueryExecutor, EntityCreator entityCreator, TraceWriter log)
+        private static async Task<List<TS>> LoadEntities(string retentionPolicy, string measurement, string defaultTime, bool doAdHocResampling, int period, List<TsMetadata> metas, StringBuilder batchBuilder, int batchSize, int parallelism, PartProgress progress, InfluxQueryExecutor influxQueryExecutor, EntityCreator entityCreator, TraceWriter log)
         {
             var tasks = new List<Task<string>>(parallelism);
             var tags = new List<string>();
@@ -188,13 +221,14 @@ namespace IocDownsampler
                     string tag = TagCleaner.Clean(tagMeta.Tag);
 
                     tags.Add(tagMeta.Tag + " cleaned: " + tag);
-                    string timePredicate = tagMeta.Timestamp.HasValue ? tagMeta.Timestamp.Value.ToInfluxTimestamp() : $"now() - {influxConfig.DefaultTime}";
-                    string query = $"SELECT \"5minMean\", \"5minMax\", \"5minMin\", \"5minStddev\", \"tag\", \"plant\" FROM \"{influxConfig.DbRetentionPolicy}\".\"{influxConfig.DbMeasurement}\" WHERE \"tag\"='{tag}' AND time > {timePredicate};";
+                    string timePredicate = tagMeta.Timestamp.HasValue ? tagMeta.Timestamp.Value.ToInfluxTimestamp() : $"now() - {defaultTime}";
+                    string query = QueryBuilder.CreateMainQuery(retentionPolicy, measurement, timePredicate, tag, doAdHocResampling);//$"SELECT \"5minMean\", \"5minMax\", \"5minMin\", \"5minStddev\", \"tag\", \"plant\" FROM \"{influxConfig.DbImsRetentionPolicy}\".\"{influxConfig.DbImsMeasurement}\" WHERE \"tag\"='{tag}' AND time > {timePredicate};";
                     batchBuilder.Append(query);
                     progress.ProcessedTags++;
                 }
 
-                tasks.Add(Timer.Time(() => influxQueryExecutor.Query(batchBuilder.ToString(), log), $"Querying influx #{a}", log));
+                //tasks.Add(Timer.Time(() => influxQueryExecutor.Query(batchBuilder.ToString(), log), $"Querying influx #{a}", log));
+                tasks.Add(influxQueryExecutor.Query(batchBuilder.ToString(), log));
                 batchBuilder.Clear();
             }
 

@@ -22,12 +22,16 @@ namespace IocDownsampler
                     DbUsername = GetConfigValue("InfluxDbUsername"),
                     DbPassword = GetConfigValue("InfluxDbPassword"),
                     DbName = GetConfigValue("InfluxDbDbName"),
-                    DbRetentionPolicy = GetConfigValue("InfluxDbRetentionPolicy"),
-                    DbMeasurement = GetConfigValue("InfluxDbMeasurement"),
+                    DbImsRetentionPolicy = GetConfigValue("InfluxDbImsRetentionPolicy"),
+                    DbImsMeasurement = GetConfigValue("InfluxDbImsMeasurement"),
+                    DbCalcRetentionPolicy = GetConfigValue("InfluxDbCalcRetentionPolicy"),
+                    DbCalcMeasurement = GetConfigValue("InfluxDbCalcMeasurement"),
                     DefaultTime = GetConfigValue("DefaultTime"),
                     Parallelism = int.Parse(GetConfigValue("Parallelism")),
                     FirsttimerBatchSize = int.Parse(GetConfigValue("FirsttimerBatchSize")),
-                    OldtimerBatchSize = int.Parse(GetConfigValue("OldtimerBatchSize"))
+                    OldtimerBatchSize = int.Parse(GetConfigValue("OldtimerBatchSize")),
+                    DoAdHocResampling = GetConfigValue("DoAdHocResampling").ToLower() == "true",
+                    SkipLastPoint = GetConfigValue("SkipLastSample").ToLower() == "true"
                 }
             };
         }
