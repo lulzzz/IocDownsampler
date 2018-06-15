@@ -18,7 +18,7 @@
             string from = $" FROM \"{retentionPolicy}\".\"{measurement}\" WHERE \"tag\"='{tag}' AND time > {timePredicate}";
 
             string group = doAdHocResampling
-                ? " GROUP BY \"tag\", time(5m) fill(\"linear\")"
+                ? " GROUP BY time(5m) fill(\"linear\")"
                 : string.Empty;
 
             return $"{select}{from}{group};";

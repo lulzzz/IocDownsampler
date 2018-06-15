@@ -36,14 +36,14 @@ namespace IocDownsampler.Tests
                     OldtimerBatchSize = 100,
                     Parallelism = 32,
                     DoAdHocResampling = false,
-                    SkipLastSample = false // true
+                    SkipLastPoint = true
                 }
             };
             const string influxBaseUrl = "http://localhost:8086/";
             const int numberOfTimeSeries = 3;
             const int numberOfPoints = 100;
-            int firstNumberOfPoints = (int)(numberOfPoints * 0.7);
-            int secondNumberOfPoints = (int)(numberOfPoints * 0.3);
+            int firstNumberOfPointsFromEachSeries = (int)(numberOfPoints * 0.7);
+            int secondNumberOfPointsFromEachSeries = (int)(numberOfPoints * 0.3);
 
             var queryExecutor = new InfluxQueryExecutor(influxBaseUrl, config.InfluxConfig.DbUsername, config.InfluxConfig.DbPassword);
 
@@ -59,23 +59,23 @@ namespace IocDownsampler.Tests
                 InsertTagMetadata(config, startPoints);
                 var points = CreatePoints(startPoints, numberOfPoints);
 
-                string firstBody = CreateBody(config, points.Take(firstNumberOfPoints).ToList());
+                string firstBody = CreateBody(config, points.Values.SelectMany(v => v.Take(firstNumberOfPointsFromEachSeries)).ToList());
 
                 await queryExecutor.Write(firstBody, config.InfluxConfig.DbName, config.InfluxConfig.DbImsRetentionPolicy);
 
                 await DataMover.Move(config, new Logger(TraceLevel.Error));
                 int firstCount = GetCount(config);
 
-                Assert.AreEqual(firstNumberOfPoints - numberOfTimeSeries, firstCount);
+                Assert.AreEqual((firstNumberOfPointsFromEachSeries - 1) * numberOfTimeSeries, firstCount);
 
-                string secondBody = CreateBody(config, points.Skip(firstNumberOfPoints).Take(secondNumberOfPoints).ToList());
+                string secondBody = CreateBody(config, points.Values.SelectMany(v => v.Skip(firstNumberOfPointsFromEachSeries).Take(secondNumberOfPointsFromEachSeries)).ToList());
                 await queryExecutor.Write(secondBody, config.InfluxConfig.DbName, config.InfluxConfig.DbImsRetentionPolicy);
 
                 await DataMover.Move(config, new Logger(TraceLevel.Error));
 
                 int secondCount = GetCount(config);
 
-                Assert.AreEqual(numberOfPoints - numberOfTimeSeries, secondCount);
+                Assert.AreEqual((numberOfPoints * numberOfTimeSeries) - numberOfTimeSeries, secondCount);
             }
             finally
             {
@@ -112,15 +112,18 @@ namespace IocDownsampler.Tests
             }
         }
 
-        private static List<TsSpec> CreatePoints(List<TsSpec> startPoints, int pointCount)
+        private static Dictionary<string, List<TsSpec>> CreatePoints(List<TsSpec> startPoints, int pointCount)
         {
-            var tsSpecs = new List<TsSpec>(startPoints.Count * pointCount);
+            var tsSpecs = new Dictionary<string, List<TsSpec>>(startPoints.Count * pointCount);
 
             foreach (var initialTsSpec in startPoints)
             {
+                var list = new List<TsSpec>(pointCount);
+                tsSpecs.Add(initialTsSpec.Tag, list);
+                
                 for (int i = 0; i < pointCount; i++)
                 {
-                    tsSpecs.Add(new TsSpec
+                    list.Add(new TsSpec
                     {
                         Id = initialTsSpec.Id,
                         Tag = initialTsSpec.Tag,

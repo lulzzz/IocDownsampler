@@ -15,7 +15,7 @@ namespace IocDownsampler
             _tagToId = tagToId;
         }
 
-        public List<TS> CreateEntities<T>(IEnumerable<string> resultsets, int period, bool skipLastPoint = true) where T : TS, new()
+        public List<TS> CreateEntities<T>(IEnumerable<string> resultsets, int period, bool skipLastPoint) where T : TS, new()
         {
             var deserializedResultsets = resultsets.Select(rs => JsonConvert.DeserializeObject<InfluxDbResultset>(rs)).ToList();
 
@@ -42,15 +42,15 @@ namespace IocDownsampler
                         };
 
                         timeseriesEntities.Add(entity);
+                    }
 
-                        if (skipLastPoint)
-                        {
-                            entities.AddRange(timeseriesEntities.OrderBy(e => e.Timestamp).Take(entities.Count - 1));
-                        }
-                        else
-                        {
-                            entities.AddRange(timeseriesEntities);
-                        }
+                    if (skipLastPoint)
+                    {
+                        entities.AddRange(timeseriesEntities.OrderBy(e => e.Timestamp).Take(timeseriesEntities.Count - 1));
+                    }
+                    else
+                    {
+                        entities.AddRange(timeseriesEntities);
                     }
                 }
             }
