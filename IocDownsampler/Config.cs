@@ -31,7 +31,7 @@ namespace IocDownsampler
                     FirsttimerBatchSize = int.Parse(GetConfigValue("FirsttimerBatchSize")),
                     OldtimerBatchSize = int.Parse(GetConfigValue("OldtimerBatchSize")),
                     DoAdHocResampling = GetConfigValue("DoAdHocResampling").ToLower() == "true",
-                    SkipLastPoint = GetConfigValue("SkipLastSample").ToLower() == "true"
+                    SkipLastPoint = GetConfigValue("SkipLastPoint").ToLower() == "true"
                 }
             };
         }

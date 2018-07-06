@@ -1,4 +1,5 @@
 ﻿using IocDownsampler.Models;
+using IocDownsampler.Utils;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -15,7 +16,7 @@ namespace IocDownsampler
             _tagToId = tagToId;
         }
 
-        public List<TS> CreateEntities<T>(IEnumerable<string> resultsets, int period, bool skipLastPoint) where T : TS, new()
+        public List<TS> CreateEntities<T>(IEnumerable<string> resultsets, IDictionary<string, TsMetadata> metas, int period, bool skipLastPoint) where T : TS, new()
         {
             var deserializedResultsets = resultsets.Select(rs => JsonConvert.DeserializeObject<InfluxDbResultset>(rs)).ToList();
 
@@ -27,26 +28,56 @@ namespace IocDownsampler
                 {
                     var serie = result.Series.Single();
                     var timeseriesEntities = new List<TS>();
+                    var meta = metas[serie.Tags.Tag];
+                    bool valueFound = false;
 
                     foreach (var value in serie.Values)
                     {
                         var entity = new T
                         {
                             Timestamp = (DateTime)value[0],
-                            AVG = ConvertToDouble(value[1]),
-                            MAX = ConvertToDouble(value[2]),
-                            MIN = ConvertToDouble(value[3]),
-                            STD = ConvertToDouble(value[4]),
-                            Id = _tagToId[(string)value[5]],
+                            AVG = DoubleConverter.Convert(value[1]),
+                            MAX = DoubleConverter.Convert(value[2]),
+                            MIN = DoubleConverter.Convert(value[3]),
+                            STD = DoubleConverter.Convert(value[4]),
+                            Id = _tagToId[serie.Tags != null ? serie.Tags.Tag : (string)value[5]],
                             Period = period
                         };
 
-                        timeseriesEntities.Add(entity);
+                        if (entity.AVG != null)
+                        {
+                            valueFound = true;
+                        }
+                        else if (!valueFound)
+                        {
+                            entity.AVG = meta.LastValueBeforeWatermark;
+                            entity.MAX = meta.LastValueBeforeWatermark;
+                            entity.MIN = meta.LastValueBeforeWatermark;
+                        }
+                        else
+                        {
+                            throw new Exception($"Tag has unexpected nulls: {serie.Tags.Tag}");
+                        }
+
+                        if ((meta.Watermark.HasValue && entity.Timestamp > meta.Watermark)
+                            || (entity.AVG != null))
+                        {
+                            timeseriesEntities.Add(entity);
+                        }
                     }
 
                     if (skipLastPoint)
                     {
-                        entities.AddRange(timeseriesEntities.OrderBy(e => e.Timestamp).Take(timeseriesEntities.Count - 1));
+                        if (timeseriesEntities.Count == 1
+                            && (timeseriesEntities.Single().Timestamp < DateTime.UtcNow.AddDays(-1) || !meta.Watermark.HasValue))
+                        {
+                            entities.Add(timeseriesEntities.Single());
+                        }
+                        else
+                        {
+                            // The last point is not based on a full interval, so it should be written to SQL later.
+                            entities.AddRange(OrderByTimestamp(timeseriesEntities).Take(timeseriesEntities.Count - 1));
+                        }
                     }
                     else
                     {
@@ -58,19 +89,23 @@ namespace IocDownsampler
             return entities;
         }
 
-        private static double? ConvertToDouble(object value)
+        private static IEnumerable<TS> OrderByTimestamp(List<TS> timeseriesEntities)
         {
-            if (value == null)
+            // Memory optimization as the list should be ordered
+            bool isOrdered = true;
+
+            for (int i=0; i<timeseriesEntities.Count - 1; i++)
             {
-                return null;
+                if(timeseriesEntities[i].Timestamp >= timeseriesEntities[i+1].Timestamp)
+                {
+                    isOrdered = false;
+                    break;
+                }
             }
 
-            if (value is long)
-            {
-                return (long)value;
-            }
-
-            return (double)value;
+            return isOrdered
+                ? timeseriesEntities.AsEnumerable()
+                : timeseriesEntities.OrderBy(e => e.Timestamp);
         }
     }
 }

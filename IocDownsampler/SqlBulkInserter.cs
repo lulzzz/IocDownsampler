@@ -9,7 +9,7 @@ namespace IocDownsampler
 {
     public static class SqlBulkInserter
     {
-        public static async Task BulkInsert(string connectionString, List<TS> entities, string tagIdName, string tableName, int batchSize = 250000)
+        public static async Task BulkInsert(string connectionString, List<TS> entities, string tagIdName, string tableName, int batchSize = 100000)
         {
             var dataTable = new DataTable();
             dataTable.Columns.Add(tagIdName, typeof(Guid));

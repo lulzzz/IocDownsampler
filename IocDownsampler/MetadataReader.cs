@@ -10,7 +10,7 @@ namespace IocDownsampler
 {
     public static class MetadataReader
     {
-        public static async Task<(List<TsMetadata> ims, List<TsMetadata> calc)> GetMetadata(string connectionString, int period)
+        public static async Task<(List<TsMetadataDto> ims, List<TsMetadataDto> calc)> GetMetadata(string connectionString, int period)
         {
             const string imsQuery =
 @"SELECT meta.IMSTag_ID AS Id, meta.Tag, ts.Timestamp FROM IMSTag meta
@@ -27,10 +27,10 @@ namespace IocDownsampler
 	AND ts.Timestamp = (SELECT MAX(Timestamp) FROM CalculatedTS WHERE CalculatedTag_ID = meta.CalculatedTag_ID AND Period = @Period)";
 
             var imsMetaListTask = InConn(connectionString,
-                conn => conn.QueryAsync<TsMetadata>(imsQuery, new { Period = period }));
+                conn => conn.QueryAsync<TsMetadataDto>(imsQuery, new { Period = period }));
 
             var calcMetaListTask = InConn(connectionString,
-                conn => conn.QueryAsync<TsMetadata>(calcQuery, new { Period = period }));
+                conn => conn.QueryAsync<TsMetadataDto>(calcQuery, new { Period = period }));
 
             await Task.WhenAll(imsMetaListTask, calcMetaListTask);
 

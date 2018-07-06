@@ -24,10 +24,10 @@ namespace IocDownsampler.Tests
                     ApiManagementHeaderName = "dummy",
                     ApiManagementKey = "dummy",
                     ApiManagementUrl = "http://localhost:8086/query",
-                    DbImsMeasurement = "aggregates",
-                    DbImsRetentionPolicy = "aggregates",
-                    DbCalcMeasurement = "aggregates",
-                    DbCalcRetentionPolicy = "aggregates",
+                    DbImsMeasurement = "autogen",
+                    DbImsRetentionPolicy = "data",
+                    DbCalcMeasurement = "writeback",
+                    DbCalcRetentionPolicy = "data",
                     DbName = "iocdata",
                     DbPassword = "root",
                     DbUsername = "root",
@@ -35,7 +35,7 @@ namespace IocDownsampler.Tests
                     FirsttimerBatchSize = 1,
                     OldtimerBatchSize = 100,
                     Parallelism = 32,
-                    DoAdHocResampling = false,
+                    DoAdHocResampling = true,
                     SkipLastPoint = true
                 }
             };
@@ -66,6 +66,7 @@ namespace IocDownsampler.Tests
                 await DataMover.Move(config, new Logger(TraceLevel.Error));
                 int firstCount = GetCount(config);
 
+                // -1 because SkipLastPoint = true
                 Assert.AreEqual((firstNumberOfPointsFromEachSeries - 1) * numberOfTimeSeries, firstCount);
 
                 string secondBody = CreateBody(config, points.Values.SelectMany(v => v.Skip(firstNumberOfPointsFromEachSeries).Take(secondNumberOfPointsFromEachSeries)).ToList());
@@ -177,7 +178,8 @@ namespace IocDownsampler.Tests
 
             foreach (var tsSpec in tsSpecs)
             {
-                points.Add($"{config.InfluxConfig.DbImsMeasurement},tag={tsSpec.Tag} 5minMean=1,5minMax=1,5minMin=1,5minStddev=0 {tsSpec.Timestamp.ToInfluxTimestamp()}");
+                //points.Add($"{config.InfluxConfig.DbImsMeasurement},tag={tsSpec.Tag} 5minMean=1,5minMax=1,5minMin=1,5minStddev=0 {tsSpec.Timestamp.ToInfluxTimestamp()}");
+                points.Add($"{config.InfluxConfig.DbImsMeasurement},tag={tsSpec.Tag} value=1 {tsSpec.Timestamp.ToInfluxTimestamp()}");
             }
 
             return string.Join("\n", points);
