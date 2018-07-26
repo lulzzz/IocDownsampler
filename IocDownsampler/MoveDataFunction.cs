@@ -9,7 +9,7 @@ namespace IocDownsampler
     public static class MoveDataFunction
     {
         [FunctionName("MoveDataFunction")]
-        public static async Task Run([TimerTrigger("0 */10 * * * *", RunOnStartup=true)]TimerInfo myTimer, TraceWriter log)
+        public static async Task Run([TimerTrigger("0 */10 * * * *", RunOnStartup = true)]TimerInfo myTimer, TraceWriter log)
         {
             log.Info($"C# Timer trigger function executed at: {DateTime.Now}");
 
